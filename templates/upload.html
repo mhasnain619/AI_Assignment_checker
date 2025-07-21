@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignment Checker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body class="container mt-5">
+    <h1 class="text-center mb-4">Assignment Checker</h1>
+    <div class="card p-4 shadow">
+        <h3>Upload Your Assignment</h3>
+        <form method="post" action="/upload" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="file" class="form-label">Select a .py or .ipynb file:</label>
+                <input type="file" name="file" accept=".py,.ipynb" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-primary">Upload</button>
+        </form>
+    </div>
+</body>
+
+</html>

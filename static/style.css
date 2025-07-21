@@ -1,0 +1,84 @@
+/* General Styling */
+body {
+    background-color: #f8f9fa;
+    font-family: 'Arial', sans-serif;
+}
+
+/* Card Styling for Form and Feedback */
+.card {
+    border-radius: 10px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Form Styling */
+.form-label {
+    font-weight: bold;
+    color: #333;
+}
+
+.form-control {
+    border: 2px solid #ced4da;
+    border-radius: 5px;
+    transition: border-color 0.3s;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1.1rem;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+/* Feedback Section Styling */
+h2 {
+    color: #007bff;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+h3 {
+    color: #333;
+    font-size: 1.5rem;
+    margin-top: 20px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+}
+
+pre {
+    background-color: #f1f3f5;
+    padding: 15px;
+    border-radius: 5px;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ced4da;
+}
+
+/* Responsive Design */
+@media (max-width: 576px) {
+    .card {
+        padding: 15px;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+    }
+
+    .btn-primary {
+        width: 100%;
+    }
+}

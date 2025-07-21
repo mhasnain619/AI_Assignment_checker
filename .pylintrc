@@ -1,0 +1,20 @@
+[MASTER]
+# Disable specific warnings/errors to make Pylint less strict
+disable=
+    C0114,  # Missing module docstring
+    C0115,  # Missing class docstring
+    C0116,  # Missing function docstring
+    R0903,  # Too few public methods
+    W0311,  # Bad indentation
+    W0703,  # Broad-except
+    C0303,  # Trailing whitespace
+    C0301,  # Line too long
+
+# Set maximum line length to a reasonable value
+max-line-length=120
+
+# Allow fewer checks for small scripts
+min-similarity-lines=6
+
+# Ignore minor style issues
+ignore-patterns=.*\.ipynb
