@@ -1,80 +1,145 @@
-from flask import Flask, request, render_template
+import streamlit as st
 import os
-from transformers import AutoTokenizer, AutoModel
-import torch
-from pylint.lint import Run
-from pylint.reporters.text import TextReporter
-from io import StringIO
+import tempfile
+import pandas as pd
+from datetime import datetime
+from scripts.logger import get_logger
+from models.codebert import analyze_with_codebert
+from utils.code_utils import pylint_check, extract_code_from_ipynb
+from charset_normalizer import detect
 
-app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.static_folder = 'static'
+logger = get_logger(__name__)
 
-# Load CodeBERT with error handling
-try:
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/codebert-base")
-    model = AutoModel.from_pretrained("microsoft/codebert-base")
-except Exception as e:
-    print(f"Error loading CodeBERT: {e}")
-    tokenizer = None
-    model = None
+UPLOAD_FOLDER = 'static/uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
-def pylint_check(file_path):
-    try:
-        output = StringIO()
-        reporter = TextReporter(output)
-        Run([file_path, '--disable=C0114,C0115,W0311,W0703,C0116,R0903,C0303,C0301', '--max-line-length=120'], reporter=reporter, exit=False)
-        pylint_output = output.getvalue()
-        return pylint_output if pylint_output.strip() else "No critical issues found. Code looks good!"
-    except Exception as e:
-        return f"Pylint error: {str(e)}"
+st.markdown("""
+    <style>
+    .rainbow {
+        font-size: 55px;
+        font-weight: bold;
+        text-align: center;
+        font-family: "Comic Sans MS", cursive;
+        animation: rainbow 5s infinite;
+        background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+        background-size: 400%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    @keyframes rainbow {
+        0% { background-position: 0%; }
+        100% { background-position: 400%; }
+    }
+    </style>
+    <div class="rainbow">Assignment Checker</div>
+""", unsafe_allow_html=True)
 
-def analyze_code(file_path):
-    try:
-        # Read the code file
-        with open(file_path, 'r', encoding='utf-8') as file:
-            code = file.read()
+st.write("Upload a Python (.py) or Jupyter Notebook (.ipynb) file to analyze its code quality.")
+
+# Input for student ID or name
+student_id = st.text_input("Enter Student ID or Name", value="Unknown")
+
+uploaded_files = st.file_uploader("Choose a file", type=['py', 'ipynb'], accept_multiple_files=True)
+
+if uploaded_files is not None:
+    results = []
+    for uploaded_file in uploaded_files:
+        file_path = os.path.join(UPLOAD_FOLDER, uploaded_file.name)
+        try:
+            # Save uploaded file
+            with open(file_path, 'wb') as f:
+                f.write(uploaded_file.getvalue())
         
-        # CodeBERT analysis
-        codebert_feedback = "CodeBERT not loaded."
-        if tokenizer and model:
-            inputs = tokenizer(code, return_tensors="pt", truncation=True, max_length=512)
-            with torch.no_grad():
-                outputs = model(**inputs)
-            codebert_feedback = f"Code analyzed with CodeBERT. Length: {len(code)} characters."
-
-        # Pylint analysis
-        pylint_feedback = pylint_check(file_path)
+            st.write(f"File **{uploaded_file.name}** uploaded successfully!")
+            is_ipynb = uploaded_file.name.endswith('.ipynb')
         
-        # Combine and format feedback
-        feedback = f"<h3>Analysis Report</h3><p><strong>CodeBERT Feedback:</strong> {codebert_feedback}</p><p><strong>Pylint Feedback:</strong><br><pre>{pylint_feedback}</pre></p>"
-        return feedback
-    except Exception as e:
-        return f"Error analyzing file: {str(e)}"
-
-@app.route('/')
-def index():
-    return render_template('upload.html')
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    try:
-        if 'file' not in request.files:
-            return 'No file uploaded', 400
-        file = request.files['file']
-        if file.filename == '':
-            return 'No file selected', 400
-        if file and (file.filename.endswith('.py') or file.filename.endswith('.ipynb')):
-            file_path = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))
-            file.save(file_path)
-            feedback = analyze_code(file_path)
-            return f'<h2>File {file.filename} uploaded successfully!</h2>{feedback}'
-        return 'Invalid file type', 400
-    except Exception as e:
-        return f'Error during upload: {str(e)}', 500
-
-if __name__ == '__main__':
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-    app.run(debug=True, port=5000)
+            with st.spinner("Analyzing code..."):
+                # Extract code for .ipynb or read .py
+                if is_ipynb:
+                    code = extract_code_from_ipynb(file_path)
+                    if code is None:
+                        st.error("Error: Could not extract code from .ipynb file.")
+                        results.append({
+                            'Student ID/Name': student_id,
+                            'File Name': uploaded_file.name,
+                            'CodeBERT Feedback': 'Error: Could not extract code from .ipynb file.',
+                            'Pylint Feedback': 'N/A'
+                        })
+                        continue
+                else:
+                    # Read file and detect encoding
+                    with open(file_path, 'rb') as f:
+                        raw_content = f.read()
+                    detected = detect(raw_content)
+                    encoding = detected['encoding']
+               
+                    logger.debug(f"Detected encoding for {file_path}: {encoding}")
+                    if encoding not in ['utf-8', 'ascii']:
+                        code = raw_content.decode(encoding).encode('utf-8').decode('utf-8')
+                        # Save as UTF-8 for Pylint
+                        temp_file_path = os.path.join(UPLOAD_FOLDER, f"utf8_{uploaded_file.name}")
+                        with open(temp_file_path, 'w', encoding='utf-8') as f:
+                            f.write(code)
+                        file_path = temp_file_path
+                        results.append({
+                            'Student ID/Name': student_id,
+                            'File Name': uploaded_file.name,
+                            'CodeBERT Feedback': 'Error: Could not extract code from .ipynb file.',
+                            'Pylint Feedback': 'N/A'
+                        })
+                        continue
+                    else:
+                        code = raw_content.decode('utf-8')
+                
+                # For .ipynb files, save extracted code to a temporary .py file
+                analysis_file_path = file_path
+                if is_ipynb:
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as temp_file:
+                        temp_file.write(code)
+                        analysis_file_path = temp_file.name
+                        logger.debug(f"Temporary file content:\n{code}")
+                
+                # Analyze with CodeBERT
+                codebert_feedback = analyze_with_codebert(code)
+                # Run Pylint
+                pylint_feedback = pylint_check(analysis_file_path)
+                # Clean up temporary file if created
+                if is_ipynb or file_path != os.path.join(UPLOAD_FOLDER, uploaded_file.name):
+                    try:
+                        os.unlink(analysis_file_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete temporary file {analysis_file_path}: {e}")
+                results.append({
+                            'Student ID/Name': student_id,
+                            'File Name': uploaded_file.name,
+                            'CodeBERT Feedback': codebert_feedback,
+                            'Pylint Feedback': pylint_feedback
+                        })
+                # Display results
+                st.markdown(f"**Analysis Report**\n\n**CodeBERT Feedback:**\n{codebert_feedback}\n\n**Pylint Feedback:**\n```\n{pylint_feedback}\n```")
+        except Exception as e:
+            logger.error(f"Error processing file: {e}")
+            st.error(f"Error processing file: {str(e)}")
+            
+           
+            
+    # Save results to Excel
+    if results:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_path = os.path.join(UPLOAD_FOLDER, f"analysis_results_{timestamp}.xlsx")
+        try:
+            df = pd.DataFrame(results)
+            df.to_excel(excel_path, index=False)
+            st.success(f"Analysis results saved to {excel_path}")
+            # Provide download link
+            with open(excel_path, 'rb') as f:
+                st.download_button(
+                    label="Download Analysis Results",
+                    data=f,
+                    file_name=f"analysis_results_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        except Exception as e:
+            logger.error(f"Error saving results to Excel: {e}")
+            st.error(f"Error saving results to Excel: {str(e)}")
