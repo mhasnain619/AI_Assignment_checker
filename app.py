@@ -12,6 +12,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.static_folder = 'static'
 
 # Load CodeBERT with error handling
+
 try:
     tokenizer = AutoTokenizer.from_pretrained("microsoft/codebert-base")
     model = AutoModel.from_pretrained("microsoft/codebert-base")
